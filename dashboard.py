@@ -17,6 +17,7 @@ from alpha_core import (
     analyze_account,
     get_ai_summary_text,
     get_ai_analysis_all,
+    get_rule_based_analysis,
     load_ai_cache,
     DATA_DIR,
 )
@@ -101,9 +102,9 @@ with st.sidebar:
     st.divider()
 
     enable_ai = st.toggle(
-        "AI Recommendations",
+        "Gemini AI Recommendations",
         value=bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")),
-        help="Requires GEMINI_API_KEY environment variable"
+        help="Enhances recommendations with Gemini AI. Requires GEMINI_API_KEY. Rule-based analysis is always available."
     )
 
     if st.button("🔄 Refresh Data", use_container_width=True):
@@ -189,7 +190,7 @@ st.divider()
 
 # ── Per-account sections ────────────────────────────────────────────────────
 
-# AI analysis (try cache first, then single combined call for all displayed accounts)
+# AI analysis (try Gemini if enabled, otherwise rule-based)
 if enable_ai:
     ai_key = f"ai_all_{period}_{'+'.join(a['name'] for a in display_accounts)}"
     if ai_key not in st.session_state:
@@ -207,8 +208,10 @@ if enable_ai:
                     account_data_list.append((a["name"], summary, symbols))
                 st.session_state[ai_key] = get_ai_analysis_all(account_data_list)
     ai_results = st.session_state[ai_key]
+    analysis_source = "Gemini 2.5 Flash"
 else:
     ai_results = {}
+    analysis_source = "Rule-Based"
 
 for acct in display_accounts:
     name = acct["name"]
@@ -227,13 +230,14 @@ for acct in display_accounts:
                  delta=f"{p_alpha:+.2f}%", delta_color="normal")
     mc[3].metric("Holdings", len(rdf))
 
-    # Apply AI results for this account
+    # Apply analysis results for this account
     if enable_ai and name in ai_results:
         recs, actions = ai_results[name]
         rdf["Action"] = rdf["Symbol"].map(actions).fillna("HOLD")
     else:
-        rdf["Action"] = "HOLD"
-        recs = None
+        # Rule-based analysis (no API key needed)
+        recs, actions = get_rule_based_analysis(name, rdf, total_value, p_alpha, p_return, spy_return)
+        rdf["Action"] = rdf["Symbol"].map(actions).fillna("HOLD")
 
     # Charts side by side
     chart_left, chart_right = st.columns(2)
@@ -323,9 +327,9 @@ for acct in display_accounts:
             else:
                 st.warning(f"🟡 **WARNING** — {r['Symbol']} at {r['Weight (%)']:.1f}% of account")
 
-    # AI recommendations
+    # Advisor recommendations (always shown)
     if recs:
-        with st.expander("🤖 AI Advisor Recommendations (Gemini 2.5 Flash)", expanded=True):
+        with st.expander(f"🤖 Advisor Recommendations ({analysis_source})", expanded=True):
             st.markdown(recs)
 
     st.divider()

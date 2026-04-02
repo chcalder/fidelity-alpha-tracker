@@ -12,11 +12,14 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
+import os
+
 from alpha_core import (
     parse_csv,
     analyze_account,
     get_ai_summary_text,
     get_ai_analysis_all,
+    get_rule_based_analysis_all,
     save_ai_cache,
     DATA_DIR,
     REPORT_DIR,
@@ -167,7 +170,7 @@ def build_html_table_rows(results_df):
 
 
 def build_html_section(account_name, results_df, total_value, portfolio_alpha, portfolio_return,
-                       spy_return, ai_recommendations):
+                       spy_return, ai_recommendations, analysis_source="Gemini 2.5 Flash"):
     """Build one account section for the HTML report."""
     pa_class = "positive" if portfolio_alpha > 0 else "negative"
     pr_class = "positive" if portfolio_return > 0 else "negative"
@@ -243,7 +246,7 @@ def build_html_section(account_name, results_df, total_value, portfolio_alpha, p
     </div>
 
     <div class="ai-section">
-      <h3>AI Advisor Recommendations <span class="ai-badge">Gemini 2.5 Flash</span></h3>
+      <h3>Advisor Recommendations <span class="ai-badge">{analysis_source}</span></h3>
       <ul>
 {ai_bullets}      </ul>
     </div>
@@ -300,14 +303,23 @@ for account_name, df, csv_path in accounts:
     symbols = results_df["Symbol"].tolist()
     account_results.append((account_name, df, csv_path, results_df, total_value, portfolio_alpha, portfolio_return, summary_text, symbols))
 
-# Single AI call for ALL accounts
-print("Requesting AI analysis for all accounts (single call)...")
-account_summaries = [(name, summary, syms) for name, _, _, _, _, _, _, summary, syms in account_results]
-ai_results = get_ai_analysis_all(account_summaries)
+# Determine analysis mode: Gemini if API key is set, otherwise rule-based
+api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+if api_key:
+    print("Requesting AI analysis for all accounts (Gemini)...")
+    account_summaries = [(name, summary, syms) for name, _, _, _, _, _, _, summary, syms in account_results]
+    ai_results = get_ai_analysis_all(account_summaries)
+    analysis_source = "Gemini 2.5 Flash"
+else:
+    print("No API key set — using rule-based analysis...")
+    account_data = [(name, rdf, tv, pa, pr, spy_return)
+                    for name, _, _, rdf, tv, pa, pr, _, _ in account_results]
+    ai_results = get_rule_based_analysis_all(account_data)
+    analysis_source = "Rule-Based"
 
-# Cache AI results for dashboard reuse
+# Cache results for dashboard reuse
 save_ai_cache(ai_results, period="5d")
-print("AI results cached for dashboard reuse.")
+print(f"Analysis results cached ({analysis_source}).")
 
 # Now output results per account
 for account_name, df, csv_path, results_df, total_value, portfolio_alpha, portfolio_return, _, _ in account_results:
@@ -317,7 +329,7 @@ for account_name, df, csv_path, results_df, total_value, portfolio_alpha, portfo
 
     # Terminal output
     print_account(account_name, results_df, total_value, portfolio_alpha, portfolio_return, spy_return)
-    print(f"\n{BOLD}  AI ADVISOR RECOMMENDATIONS{RESET}")
+    print(f"\n{BOLD}  ADVISOR RECOMMENDATIONS ({analysis_source}){RESET}")
     print(f"{DIM}  {'─' * 70}{RESET}")
     for line in ai_recs.split("\n"):
         line = line.strip()
@@ -326,7 +338,8 @@ for account_name, df, csv_path, results_df, total_value, portfolio_alpha, portfo
 
     # HTML section
     html_sections += build_html_section(account_name, results_df, total_value,
-                                        portfolio_alpha, portfolio_return, spy_return, ai_recs)
+                                        portfolio_alpha, portfolio_return, spy_return, ai_recs,
+                                        analysis_source)
 
     # Accumulate grand totals
     grand_total_value += total_value

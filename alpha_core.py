@@ -110,6 +110,73 @@ def get_ai_summary_text(account_name, results_df, total_value, portfolio_alpha, 
     return text
 
 
+# ── Rule-based analysis (no API key needed) ─────────────────────────────────
+
+def get_rule_based_analysis(account_name, results_df, total_value, portfolio_alpha, portfolio_return, spy_return):
+    """Generate BUY/SELL/HOLD actions and recommendation bullets using deterministic rules.
+    Returns (recs_text, actions_dict) in the same format as Gemini output.
+    """
+    actions = {}
+    recs = []
+
+    for _, r in results_df.iterrows():
+        sym = r["Symbol"]
+        weight = r["Weight (%)"]
+        alpha = r["Alpha (%)"]
+        ret = r["5-Day Return (%)"]
+
+        if weight > 20:
+            actions[sym] = "SELL"
+        elif pd.notna(alpha) and alpha < -2 and weight > 10:
+            actions[sym] = "SELL"
+        elif pd.notna(alpha) and alpha > 1 and weight < 10:
+            actions[sym] = "BUY"
+        else:
+            actions[sym] = "HOLD"
+
+    # Concentration risk recommendations
+    critical = results_df[results_df["Risk"] == "CRITICAL"].sort_values("Weight (%)", ascending=False)
+    for _, r in critical.iterrows():
+        recs.append(f"Consider trimming {r['Symbol']} from {r['Weight (%)']:.1f}% to 10-15% — "
+                    f"concentration above 20% is a critical risk.")
+
+    warning = results_df[results_df["Risk"] == "WARNING"].sort_values("Weight (%)", ascending=False)
+    for _, r in warning.iterrows():
+        recs.append(f"{r['Symbol']} at {r['Weight (%)']:.1f}% is approaching high concentration — "
+                    f"consider a target weight of 10-12%.")
+
+    # Alpha-based recommendations
+    if portfolio_alpha < 0:
+        recs.append(f"Portfolio alpha is {portfolio_alpha:+.2f}% vs SPY — "
+                    f"consider shifting some weight toward defensive positions like index funds or dividend ETFs.")
+
+    worst = results_df.dropna(subset=["Alpha (%)"]).nsmallest(1, "Alpha (%)")
+    if not worst.empty:
+        w = worst.iloc[0]
+        if pd.notna(w["Alpha (%)"]) and w["Alpha (%)"] < -3 and w["Weight (%)"] > 5:
+            recs.append(f"{w['Symbol']} has significant negative alpha ({w['Alpha (%)']:+.2f}%) at "
+                        f"{w['Weight (%)']:.1f}% weight — review this position.")
+
+    # Cap at 3 bullets
+    recs = recs[:3]
+    if not recs:
+        recs.append("No major concerns — portfolio concentration and alpha are within acceptable ranges.")
+
+    recs_text = "\n".join(f"- {r}" for r in recs)
+    return recs_text, actions
+
+
+def get_rule_based_analysis_all(account_data):
+    """Rule-based analysis for all accounts.
+    account_data: list of (account_name, results_df, total_value, portfolio_alpha, portfolio_return, spy_return)
+    Returns dict of account_name -> (recs_text, actions_dict).
+    """
+    results = {}
+    for name, results_df, total_value, portfolio_alpha, portfolio_return, spy_return in account_data:
+        results[name] = get_rule_based_analysis(name, results_df, total_value, portfolio_alpha, portfolio_return, spy_return)
+    return results
+
+
 # ── Gemini AI analysis ──────────────────────────────────────────────────────
 
 def _call_gemini(client, prompt, max_retries=2):
