@@ -1,6 +1,6 @@
 # Fidelity Alpha Tracker
 
-Portfolio analytics tool that parses Fidelity CSV exports, calculates alpha vs the S&P 500 (SPY), flags concentration risk, and provides AI-powered Buy/Hold/Sell recommendations.
+Portfolio analytics tool that parses Fidelity CSV exports, calculates alpha vs the S&P 500 (SPY), flags concentration risk, and provides Buy/Hold/Sell recommendations — no API key required.
 
 **Alpha** = your return minus the S&P 500's return over the same period. A holding with +6% return when SPY returned -3% has an alpha of +9% — it beat the market by 9 points. Portfolio alpha is the weighted sum across all holdings, answering one question: **are you beating the market, or would you be better off just buying SPY?**
 
@@ -8,10 +8,11 @@ Portfolio analytics tool that parses Fidelity CSV exports, calculates alpha vs t
 
 - **Alpha calculation** — Per-holding and weighted portfolio alpha vs SPY
 - **Concentration risk** — Flags holdings >15% (WARNING) and >20% (CRITICAL)
-- **AI recommendations** — Gemini-powered Buy/Hold/Sell actions and portfolio advice
-- **Shared AI cache** — CLI report caches AI results so the dashboard reuses them without a duplicate API call
+- **Rule-based recommendations** — Deterministic Buy/Hold/Sell actions based on concentration, alpha, and weight thresholds (no API key needed)
+- **Optional AI enhancement** — Gemini-powered recommendations when an API key is provided
+- **Shared analysis cache** — CLI report caches results so the dashboard reuses them without recomputation
 - **Interactive dashboard** — Streamlit UI with charts, sortable tables, and time period picker
-- **CLI report** — Terminal output + standalone dark-themed HTML report with AI recommendations
+- **CLI report** — Terminal output + standalone dark-themed HTML report with recommendations
 - **Multi-account** — Consolidates all Fidelity accounts into one view
 
 ## Setup
@@ -22,7 +23,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Set your Gemini API key (optional, for AI recommendations):
+Set your Gemini API key (optional, for AI-enhanced recommendations):
 
 ```bash
 export GEMINI_API_KEY='your-key-here'
@@ -63,7 +64,7 @@ Opens at http://localhost:8501 with:
 - Account picker (individual or all combined)
 - Allocation pie charts and alpha bar charts
 - Sortable data tables with risk and action badges
-- AI advisor recommendations (toggle on/off, uses cached results when available)
+- Advisor recommendations (rule-based by default; toggle on Gemini AI for enhanced analysis)
 
 ### CLI Report
 
@@ -71,7 +72,7 @@ Opens at http://localhost:8501 with:
 python main.py
 ```
 
-Prints a formatted report to the terminal and saves a static HTML file to `reports/`. The HTML report is a fixed 5-day snapshot — it does not support switching time periods or refreshing data. AI results are cached to `reports/ai_cache.json` for reuse by the dashboard. For interactive analysis with flexible time horizons, use the dashboard instead.
+Prints a formatted report to the terminal and saves a static HTML file to `reports/`. The HTML report is a fixed 5-day snapshot — it does not support switching time periods or refreshing data. Analysis results are cached to `reports/ai_cache.json` for reuse by the dashboard. For interactive analysis with flexible time horizons, use the dashboard instead.
 
 ## Project Structure
 
@@ -108,7 +109,7 @@ The test suite covers 14 areas:
 | 4 | Market data | yfinance download, SPY present, return calculations |
 | 5 | Account analysis | Values, weights sum to 100%, alpha, risk flags correct |
 | 6 | AI summary text | Contains account name, holdings, SPY return |
-| 7 | AI / Gemini | Live API call (if key set) or fallback to HOLD defaults |
+| 7 | AI / Gemini | Live API call (if key set) or rule-based fallback |
 | 8 | HTML report | Alpha verdict, table rows match, badges, structure |
 | 9 | Terminal output | Summary, alpha verdict, SPY in output |
 | 10–12 | Scripts compile | dashboard.py, run.py, import_csv.py syntax valid |
@@ -119,6 +120,7 @@ Set `GEMINI_API_KEY` before running to also validate AI recommendations; otherwi
 
 ## Data Privacy
 
-- Portfolio data stays local — only ticker symbols and aggregated numbers are sent to Gemini for AI recommendations
+- Portfolio data stays local — only ticker symbols and aggregated numbers are sent to Gemini when AI is enabled
 - No account numbers, SSNs, or personal information is transmitted
 - AI can be disabled entirely via the dashboard toggle or by omitting the API key
+- Without an API key, the app is fully functional using rule-based analysis with zero external API calls (beyond Yahoo Finance for price data)
